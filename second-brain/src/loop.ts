@@ -1,5 +1,6 @@
 import "dotenv/config";
 import * as readline from "node:readline";
+import {encode} from "gpt-tokenizer"
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL = process.env.GROQ_URL;
@@ -35,19 +36,40 @@ async function callGroq(msgs: Message[]): Promise<string> {
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+function countTokens(msg: Message[]):number{
+    const fullText = msg.map(m=>m.content).join(" ")
+    return encode(fullText).length;
+}
+
+function trimOldest() {
+    while (countTokens(messages) > MAX_TOKENS && messages.length > 3) {
+        messages.splice(1, 2);
+    }
+}
+
+const MAX_TOKENS = 4096;
+
 function ask() {
-  rl.question("\nYou: ", async (input) => {
-    if (input === "exit") { rl.close(); return; }
+    rl.question("\nYou: ", async (input) => {
+        if (input === "exit") { rl.close(); return; }
 
-    messages.push({ role: "user", content: input });
+        messages.push({ role: "user", content: input });
 
-    const reply = await callGroq(messages);
-    console.log(`\nBrain: ${reply}`);
+        const currentTokens = countTokens(messages)
+        console.log(`[context: ${currentTokens}/${MAX_TOKENS} tokens]`);
 
-    messages.push({ role: "assistant", content: reply });
+        if (currentTokens > MAX_TOKENS) {
+        console.log("⚠️  Over budget — trimming oldest messages...");
+        trimOldest();
+        }
 
-    ask(); // loop
-  });
+        const reply = await callGroq(messages);
+        console.log(`\nBrain: ${reply}`);
+
+        messages.push({ role: "assistant", content: reply });
+
+        ask(); // loop
+    });
 }
 
 console.log("Second Brain (raw loop) — type 'exit' to quit.\n");
