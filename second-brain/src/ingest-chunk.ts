@@ -11,8 +11,10 @@ then, will call both the fun in the main and will get the chunk [].
 
 import * as fs from "fs";
 import { PDFParse } from "pdf-parse";
+import { embedText, search, embedChunks } from "./embed.js";
 
-async function extractText(filePath: string): Promise<string> {
+
+export async function extractText(filePath: string): Promise<string> {
     const dataBuffer = fs.readFileSync(filePath);
     const parser = new PDFParse({ data: dataBuffer });
     const result = await parser.getText();
@@ -21,7 +23,7 @@ async function extractText(filePath: string): Promise<string> {
     }
 
 
-type Chunk = { id: number; text: string; source: string };
+export type Chunk = { id: number; text: string; source: string };
 
 function chunkText(text: string, source: string, chunkSize = 800, overlap = 100): Chunk[] {
     const chunks: Chunk[] = [];
@@ -49,6 +51,16 @@ async function main() {
     console.log("First chunk:\n", chunks[0]!.text);
     console.log("------------------------------------------")
     console.log("\nSecond chunk (notice the overlap at the start):\n", chunks[1]!.text.slice(0, 120));
+
+
+    const embedded = await embedChunks(chunks);
+    
+    const query = "what does this document say about ashisdutta";
+    const queryVector = await embedText(query);
+    const topChunks = search(embedded, queryVector, 3);
+    
+    console.log("Top matching chunks:");
+    topChunks.forEach(c => console.log(`- [${c.id}] ${c.text.slice(0, 100)}...`));
 }
 
 main();
