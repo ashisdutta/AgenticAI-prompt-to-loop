@@ -25,7 +25,7 @@ export async function extractText(filePath: string): Promise<string> {
 
 export type Chunk = { id: number; text: string; source: string };
 
-function chunkText(text: string, source: string, chunkSize = 800, overlap = 100): Chunk[] {
+export function chunkText(text: string, source: string, chunkSize = 800, overlap = 100): Chunk[] {
     const chunks: Chunk[] = [];
     let start = 0;
     let id = 0;
@@ -41,26 +41,3 @@ function chunkText(text: string, source: string, chunkSize = 800, overlap = 100)
 
     return chunks;
 }
-
-
-async function main() {
-    const text = await extractText("./notes/ashis_dutta_resume.pdf");
-    const chunks = chunkText(text, "./notes/ashis_dutta_resume.pdf");
-
-    console.log(`Created ${chunks.length} chunks`);
-    console.log("First chunk:\n", chunks[0]!.text);
-    console.log("------------------------------------------")
-    console.log("\nSecond chunk (notice the overlap at the start):\n", chunks[1]!.text.slice(0, 120));
-
-
-    const embedded = await embedChunks(chunks);
-    
-    const query = "what does this document say about ashisdutta";
-    const queryVector = await embedText(query);
-    const topChunks = search(embedded, queryVector, 3);
-    
-    console.log("Top matching chunks:");
-    topChunks.forEach(c => console.log(`- [${c.id}] ${c.text.slice(0, 100)}...`));
-}
-
-main();

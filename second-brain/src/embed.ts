@@ -39,7 +39,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-type EmbeddedChunk = { id: number; text: string; source: string; vector: number[] };
+export type EmbeddedChunk = { id: number; text: string; source: string; vector: number[] };
 
 export async function embedChunks(chunks: Chunk[]): Promise<EmbeddedChunk[]> {
     const embedded: EmbeddedChunk[] = [];
