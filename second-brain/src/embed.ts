@@ -50,13 +50,11 @@ export async function embedChunks(chunks: Chunk[]): Promise<EmbeddedChunk[]> {
     return embedded;
 }
 
-export function search(embeddedChunks: EmbeddedChunk[], queryVector: number[], topK = 3): EmbeddedChunk[] {
+export function search(embeddedChunks: EmbeddedChunk[], queryVector: number[], topK = 3) {
     const scored = embeddedChunks.map(chunk => ({
         chunk,
         score: cosineSimilarity(queryVector, chunk.vector)
     }));
-
-    scored.sort((a, b) => b.score - a.score); // highest similarity first
-
-    return scored.slice(0, topK).map(s => s.chunk);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topK);
 }

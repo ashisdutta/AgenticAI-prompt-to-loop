@@ -9,13 +9,21 @@ const {GROQ_API_KEY, GROQ_URL, MODEL } = process.env;
 const MAX_TOKENS = 4096;
 const PDF_PATH = "./notes/ashis_dutta_resume.pdf";
 const CACHE_PATH = "./cache/embedded.json";
+const SIMILARITY_THRESHOLD = 0.35; 
 
 type Message = { role: "system" | "user" | "assistant"; content: string };
 
 // This array is short-term memory — stays lean, no retrieved context stored permanently
 const messages: Message[] = [
-    { role: "system", content: "You are my second brain. Use the provided context to answer accurately. If the context doesn't contain the answer, say so." }
-    ];
+    {
+        role: "system",
+        content: `You are my second brain. You have two sources of information: 
+        (1) our ongoing conversation, which you should always trust and refer back to freely, and 
+        (2) retrieved notes, provided only on some turns when relevant to the current question. 
+        If notes aren't provided for a turn, that does NOT mean you lack information — check the conversation history first before saying you don't know something.
+        Only say you lack information if the question is genuinely new and nothing in the conversation or provided notes addresses it.`
+    }
+];
 
 async function callGroq(msgs: Message[]): Promise<string> {
     const res = await fetch(GROQ_URL as string, {
@@ -49,18 +57,33 @@ function trimOldest() {
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+// Grab the last user+assistant exchange, if it exists, to pass it to user input for better context.
+function buildSearchQuery(input: string, messages: Message[]): string {
+    const recent = messages.slice(-2).map(m => m.content).join(" ");
+    return `${recent} ${input}`.trim();
+}
 
 function ask(embeddedChunks: EmbeddedChunk[]) {
     rl.question("\nYou: ", async (input) => {
         if (input === "exit") { rl.close(); return; }
 
-        const queryVector = await embedText(input);
-        const relevantChunks = search(embeddedChunks, queryVector, 3);
-        const context = relevantChunks.map(c => c.text).join("\n---\n");
+        const queryVector = await embedText(buildSearchQuery(input, messages));
+        const scored = search(embeddedChunks, queryVector, 3);
+        const topScore = scored[0]?.score ?? 0;
+
+        let userContent = input;
+
+        if (topScore >= SIMILARITY_THRESHOLD) {
+        const context = scored.map(s => s.chunk.text).join("\n---\n");
+        userContent = `Context from my notes:\n${context}\n\nQuestion: ${input}`;
+        console.log(`[retrieved context — top score: ${topScore.toFixed(2)}]`);
+        } else {
+        console.log(`[no relevant match — top score: ${topScore.toFixed(2)}]`);
+        }
 
         const apiMessages: Message[] = [
         ...messages,
-        { role: "user", content: `Context from my notes:\n${context}\n\nQuestion: ${input}` }
+        { role: "user", content: userContent }
         ];
 
         const currentTokens = countTokens(apiMessages);
@@ -72,11 +95,10 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
         const reply = await callGroq(apiMessages);
         console.log(`\nBrain: ${reply}`);
 
-
         messages.push({ role: "user", content: input });
         messages.push({ role: "assistant", content: reply });
 
-        ask(embeddedChunks); // this is where agentic loop is happening
+        ask(embeddedChunks);
     });
 }
 
