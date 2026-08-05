@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import "dotenv/config";
 import * as readline from "node:readline";
 import { encode } from "gpt-tokenizer";
@@ -7,6 +8,7 @@ import { embedText, embedChunks, search, type EmbeddedChunk } from "./embed.js";
 const {GROQ_API_KEY, GROQ_URL, MODEL } = process.env;
 const MAX_TOKENS = 4096;
 const PDF_PATH = "./notes/ashis_dutta_resume.pdf";
+const CACHE_PATH = "./cache/embedded.json";
 
 type Message = { role: "system" | "user" | "assistant"; content: string };
 
@@ -79,17 +81,25 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
 }
 
 async function main() {
-    console.log("Loading and embedding PDF...");
-    const text = await extractText(PDF_PATH);
-    const chunks = chunkText(text, PDF_PATH);
+    let embedded: EmbeddedChunk[];
 
-    console.log(`Created ${chunks.length} chunks`);
-    // console.log("First chunk:\n", chunks[0]!.text);
-    // console.log("------------------------------------------");
-    // console.log("\nSecond chunk (notice the overlap at the start):\n", chunks[1]!.text.slice(0, 120));
+    if (fs.existsSync(CACHE_PATH)) {
+    console.log("Found cached embeddings —- loading from disk...");
+    const raw = fs.readFileSync(CACHE_PATH, "utf-8");
+    embedded = JSON.parse(raw);
+    } else {
+        console.log("No cache found —- extracting and embedding PDF...");
+        const text = await extractText(PDF_PATH);
+        const chunks = chunkText(text, PDF_PATH);
+        console.log(`Created ${chunks.length} chunks`);
+        embedded = await embedChunks(chunks);
+        console.log(`Ready -> ${embedded.length} chunks indexed and embedded.\n`);
 
-    const embedded = await embedChunks(chunks);
-    console.log(`Ready -> ${embedded.length} chunks indexed and embedded.\n`);
+        // Save it for next time
+        fs.mkdirSync("./cache", { recursive: true }); // creates the folder if it doesn't exist
+        fs.writeFileSync(CACHE_PATH, JSON.stringify(embedded));
+        console.log("Saved embeddings to cache.");
+    }
 
     console.log("Second Brain (RAG-enabled) — type 'exit' to quit.\n");
     ask(embedded);
