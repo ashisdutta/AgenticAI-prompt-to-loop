@@ -4,6 +4,7 @@ import * as readline from "node:readline";
 import { encode } from "gpt-tokenizer";
 import { extractText, chunkText, type Chunk } from "./ingest-chunk.js";
 import { embedText, embedChunks, search, type EmbeddedChunk } from "./embed.js";
+import { toolDefinitions, executeTool } from "./tools.js";
 
 const {GROQ_API_KEY, GROQ_URL, MODEL } = process.env;
 const MAX_TOKENS = 4096;
@@ -11,7 +12,21 @@ const PDF_PATH = "./notes/ashis_dutta_resume.pdf";
 const CACHE_PATH = "./cache/embedded.json";
 const SIMILARITY_THRESHOLD = 0.35; 
 
-type Message = { role: "system" | "user" | "assistant"; content: string };
+type Message = {
+    role: "system" | "user" | "assistant" | "tool";
+    content: string | null;
+    tool_calls?: any[];
+    tool_call_id?: string;
+};
+
+type AssistantMessage = {
+    role: "assistant";
+    content: string | null; 
+    tool_calls?: {
+        id: string;
+        function: { name: string; arguments: string };
+    }[];
+};
 
 // This array is short-term memory — stays lean, no retrieved context stored permanently
 const messages: Message[] = [
@@ -25,14 +40,14 @@ const messages: Message[] = [
     }
 ];
 
-async function callGroq(msgs: Message[]): Promise<string> {
+async function callGroq(msgs: Message[]): Promise<AssistantMessage> {
     const res = await fetch(GROQ_URL as string, {
         method: "POST",
         headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${GROQ_API_KEY}`
         },
-        body: JSON.stringify({ model: MODEL, messages: msgs })
+        body: JSON.stringify({ model: MODEL, messages: msgs, tools: toolDefinitions, tool_choice: "auto" })
     });
 
     if (!res.ok) {
@@ -40,11 +55,11 @@ async function callGroq(msgs: Message[]): Promise<string> {
     }
 
     const data = await res.json();
-    return data.choices[0].message.content;
+    return data.choices[0].message;
     }
 
     function countTokens(msg: Message[]): number {
-    const fullText = msg.map(m => m.content).join(" ");
+    const fullText = msg.map(m => m.content??"").join(" ");
     return encode(fullText).length;
 }
 
@@ -63,6 +78,8 @@ function buildSearchQuery(input: string, messages: Message[]): string {
     return `${recent} ${input}`.trim();
 }
 
+
+//call model → check if it wants a tool → run tool → feed result back → repeat
 function ask(embeddedChunks: EmbeddedChunk[]) {
     rl.question("\nYou: ", async (input) => {
         if (input === "exit") { rl.close(); return; }
@@ -81,7 +98,7 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
         console.log(`[no relevant match — top score: ${topScore.toFixed(2)}]`);
         }
 
-        const apiMessages: Message[] = [
+        const apiMessages: Message[] = [ // here for my confusion, userContent contains both input and retrived chunk from thedb is score is correct.
         ...messages,
         { role: "user", content: userContent }
         ];
@@ -92,11 +109,31 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
         trimOldest();
         }
 
-        const reply = await callGroq(apiMessages);
+
+        try {
+        let assistantMessage = await callGroq(apiMessages);
+
+        while (assistantMessage.tool_calls) {
+            apiMessages.push(assistantMessage);
+            for (const call of assistantMessage.tool_calls) {
+            const args = JSON.parse(call.function.arguments);
+            console.log(`[tool call: ${call.function.name}(${JSON.stringify(args)})]`);
+            const result = executeTool(call.function.name, args);
+            apiMessages.push({ role: "tool", tool_call_id: call.id, content: result });
+            }
+            assistantMessage = await callGroq(apiMessages);
+        }
+
+        const reply = assistantMessage.content ?? "Sorry, I couldn't generate a proper response.";
         console.log(`\nBrain: ${reply}`);
 
         messages.push({ role: "user", content: input });
         messages.push({ role: "assistant", content: reply });
+
+        } catch (err) {
+        console.error(`⚠️  Error: ${(err as Error).message}`);
+        console.log("\nBrain: Sorry, I ran into an issue with that request. Could you rephrase or try again?");
+        }
 
         ask(embeddedChunks);
     });
