@@ -10,7 +10,7 @@ const {GROQ_API_KEY, GROQ_URL, MODEL } = process.env;
 const MAX_TOKENS = 4096;
 const PDF_PATH = "./notes/ashis_dutta_resume.pdf";
 const CACHE_PATH = "./cache/embedded.json";
-const SIMILARITY_THRESHOLD = 0.35; 
+const SIMILARITY_THRESHOLD = 0.30; 
 
 type Message = {
     role: "system" | "user" | "assistant" | "tool";
@@ -33,10 +33,11 @@ const messages: Message[] = [
     {
         role: "system",
         content: `You are my second brain. You have two sources of information: 
-        (1) our ongoing conversation, which you should always trust and refer back to freely, and 
-        (2) retrieved notes, provided only on some turns when relevant to the current question. 
-        If notes aren't provided for a turn, that does NOT mean you lack information — check the conversation history first before saying you don't know something.
-        Only say you lack information if the question is genuinely new and nothing in the conversation or provided notes addresses it.`
+                (1) our ongoing conversation, which you should always trust and refer back to freely, and 
+                (2) retrieved notes, provided only on some turns when relevant to the current question. 
+                If notes aren't provided for a turn, that does NOT mean you lack information — check the conversation history first before saying you don't know something.
+                Only say you lack information if the question is genuinely new and nothing in the conversation or provided notes addresses it.
+                Only call saveNote when the user is giving you NEW information to remember. Never call saveNote to re-confirm or re-save something already saved earlier in the conversation.`
     }
 ];
 
@@ -74,7 +75,7 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 
 // Grab the last user+assistant exchange, if it exists, to pass it to user input for better context.
 function buildSearchQuery(input: string, messages: Message[]): string {
-    const recent = messages.slice(-2).map(m => m.content).join(" ");
+    const recent = messages.slice(-4).map(m => m.content).join(" ");
     return `${recent} ${input}`.trim();
 }
 

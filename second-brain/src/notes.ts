@@ -16,6 +16,14 @@ function persistNotes(notes: Note[]) {
 
 export function saveNote(text: string): string {
     const notes = loadNotes();
+
+    const isDuplicate = notes.some(
+        n => n.text.trim().toLowerCase() === text.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+        return `Already saved: "${text}" — not adding a duplicate.`;
+    }
+
     const newNote: Note = {
         id: notes.length > 0 ? Math.max(...notes.map(n => n.id)) + 1 : 1,
         text,
