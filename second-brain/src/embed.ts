@@ -50,7 +50,7 @@ export async function embedChunks(chunks: Chunk[]): Promise<EmbeddedChunk[]> {
     return embedded;
 }
 
-export function search(embeddedChunks: EmbeddedChunk[], queryVector: number[], topK = 3) {
+export function search(embeddedChunks: EmbeddedChunk[], queryVector: number[], topK = 5) {
     const scored = embeddedChunks.map(chunk => ({
         chunk,
         score: cosineSimilarity(queryVector, chunk.vector)

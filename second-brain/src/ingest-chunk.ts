@@ -25,7 +25,7 @@ export async function extractText(filePath: string): Promise<string> {
 
 export type Chunk = { id: number; text: string; source: string };
 
-export function chunkText(text: string, source: string, chunkSize = 800, overlap = 100): Chunk[] {
+export function chunkText(text: string, source: string, chunkSize = 400, overlap = 100): Chunk[] {
     const chunks: Chunk[] = [];
     let start = 0;
     let id = 0;

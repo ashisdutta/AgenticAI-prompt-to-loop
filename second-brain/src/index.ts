@@ -99,7 +99,7 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
         console.log(`[no relevant match — top score: ${topScore.toFixed(2)}]`);
         }
 
-        const apiMessages: Message[] = [ // here for my confusion, userContent contains both input and retrived chunk from thedb is score is correct.
+        const apiMessages: Message[] = [ // here for my confusion, userContent contains both input and retrived chunk from the db is score is correct.
         ...messages,
         { role: "user", content: userContent }
         ];
@@ -114,18 +114,26 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
         try {
         let assistantMessage = await callGroq(apiMessages);
 
+        const MAX_TOOL_ITERATIONS = 3;
+        let iterations = 0;
+
         while (assistantMessage.tool_calls) {
+            iterations++;
+            if (iterations > MAX_TOOL_ITERATIONS) {
+                console.log("⚠️  Max tool iterations reached — stopping to avoid a runaway loop.");
+                break;
+            }
+
             apiMessages.push(assistantMessage);
             for (const call of assistantMessage.tool_calls) {
-            const args = JSON.parse(call.function.arguments);
-            console.log(`[tool call: ${call.function.name}(${JSON.stringify(args)})]`);
-            const result = executeTool(call.function.name, args);
-            apiMessages.push({ role: "tool", tool_call_id: call.id, content: result });
+                console.log(`[tool call: ${call.function.name}(${call.function.arguments})]`);
+                const result = await executeTool(call.function.name, call.function.arguments); // raw string now, no JSON.parse here
+                apiMessages.push({ role: "tool", tool_call_id: call.id, content: result });
             }
             assistantMessage = await callGroq(apiMessages);
         }
 
-        const reply = assistantMessage.content ?? "Sorry, I couldn't generate a proper response.";
+        const reply = assistantMessage.content ?? "I hit a loop trying to complete that — could you try rephrasing?";
         console.log(`\nBrain: ${reply}`);
 
         messages.push({ role: "user", content: input });
