@@ -10,7 +10,7 @@ const {GROQ_API_KEY, GROQ_URL, MODEL } = process.env;
 const MAX_TOKENS = 4096;
 const PDF_PATH = "./notes/ashis_dutta_resume.pdf";
 const CACHE_PATH = "./cache/embedded.json";
-const SIMILARITY_THRESHOLD = 0.30; 
+const SIMILARITY_THRESHOLD = 0.25; 
 
 type Message = {
     role: "system" | "user" | "assistant" | "tool";
@@ -32,12 +32,12 @@ type AssistantMessage = {
 const messages: Message[] = [
     {
         role: "system",
-        content: `You are my second brain. You have two sources of information: 
-                (1) our ongoing conversation, which you should always trust and refer back to freely, and 
-                (2) retrieved notes, provided only on some turns when relevant to the current question. 
-                If notes aren't provided for a turn, that does NOT mean you lack information — check the conversation history first before saying you don't know something.
-                Only say you lack information if the question is genuinely new and nothing in the conversation or provided notes addresses it.
-                Only call saveNote when the user is giving you NEW information to remember. Never call saveNote to re-confirm or re-save something already saved earlier in the conversation.`
+        content: `You are my second brain. You have three sources of information:
+        (1) our ongoing conversation, which you should always trust and refer back to freely,
+        (2) retrieved notes from the resume, provided only on some turns when relevant, and
+        (3) saved notes from earlier conversations, which you must actively check using the searchNotes tool whenever the user asks about something you don't already see in the conversation or retrieved resume context.
+        Before saying you don't have information about something, ALWAYS try calling searchNotes first — don't assume something isn't saved just because it's not already in front of you.
+        Only call saveNote when the user is giving you NEW information to remember. Never call saveNote to re-confirm or re-save something already saved earlier in the conversation.`
     }
 ];
 
@@ -57,9 +57,31 @@ async function callGroq(msgs: Message[]): Promise<AssistantMessage> {
 
     const data = await res.json();
     return data.choices[0].message;
+}
+
+//added if in any reason it fails it should wake up again with same args. I don't have to rewrite again
+async function callGroqWithRetry(msgs: Message[], maxRetries = 2): Promise<AssistantMessage> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+        return await callGroq(msgs);
+        } catch (err) {
+        lastError = err as Error;
+        const isRateLimit = lastError.message.includes("429");
+
+        if (attempt < maxRetries) {
+            const waitMs = isRateLimit ? 8000 : 1000 * Math.pow(2, attempt); // rate limits need longer waits
+            console.log(`⚠️  Attempt ${attempt + 1} failed (${isRateLimit ? "rate limit" : "error"}) — retrying in ${waitMs / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+        }
     }
 
-    function countTokens(msg: Message[]): number {
+    throw lastError; // all retries exhausted, let the outer try/catch in ask() handle it
+}
+
+function countTokens(msg: Message[]): number {
     const fullText = msg.map(m => m.content??"").join(" ");
     return encode(fullText).length;
 }
@@ -75,8 +97,12 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 
 // Grab the last user+assistant exchange, if it exists, to pass it to user input for better context.
 function buildSearchQuery(input: string, messages: Message[]): string {
-    const recent = messages.slice(-4).map(m => m.content).join(" ");
-    return `${recent} ${input}`.trim();
+    const recentExcludingSystem = messages
+        .filter(m => m.role !== "system")
+        .slice(-4)
+        .map(m => m.content ?? "")
+        .join(" ");
+    return `${recentExcludingSystem} ${input}`.trim();
 }
 
 
@@ -112,7 +138,7 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
 
 
         try {
-        let assistantMessage = await callGroq(apiMessages);
+        let assistantMessage = await callGroqWithRetry(apiMessages);
 
         const MAX_TOOL_ITERATIONS = 3;
         let iterations = 0;
@@ -130,7 +156,7 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
                 const result = await executeTool(call.function.name, call.function.arguments); // raw string now, no JSON.parse here
                 apiMessages.push({ role: "tool", tool_call_id: call.id, content: result });
             }
-            assistantMessage = await callGroq(apiMessages);
+            assistantMessage = await callGroqWithRetry(apiMessages);
         }
 
         const reply = assistantMessage.content ?? "I hit a loop trying to complete that — could you try rephrasing?";

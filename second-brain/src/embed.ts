@@ -21,6 +21,7 @@ async function getEmbedder() {
 }
 
 export async function embedText(text: string): Promise<number[]> {
+    console.log(`[embedText called with: ${JSON.stringify(text)}]`);
     const extractor = await getEmbedder();
     const output = await extractor(text, { pooling: "mean", normalize: true });
     return Array.from(output.data as Float32Array);
