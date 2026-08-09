@@ -9,6 +9,7 @@ b) How "similarity" between two pieces of text becomes a math operation (cosine 
 
 import { pipeline } from "@huggingface/transformers";
 import type { Chunk } from "./ingest-chunk.js";
+import { cosineSimilarity } from "./math.js";
 
 let embedder: any = null;
 
@@ -27,18 +28,6 @@ export async function embedText(text: string): Promise<number[]> {
     return Array.from(output.data as Float32Array);
 }
 
-
-function cosineSimilarity(a: number[], b: number[]): number {
-    let dotProduct = 0, normA = 0, normB = 0;
-    for (let i = 0; i < a.length; i++) {
-        const ai = a[i]!;
-        const bi = b[i]!;
-        dotProduct += ai * bi;
-        normA += ai * ai;
-        normB += bi * bi;
-    }
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 export type EmbeddedChunk = { id: number; text: string; source: string; vector: number[] };
 

@@ -1,4 +1,4 @@
-import { saveNote, listNotes, searchNotes } from "./notes.js";
+import { saveNote, listNotes, searchNotes, deleteNote } from "./notes.js";
 
 
 export const toolDefinitions = [
@@ -39,25 +39,60 @@ export const toolDefinitions = [
             required: ["query"]
         }
         }
+    },
+    {
+    type: "function",
+    function: {
+        name: "getCurrentDateTime",
+        description: "Get the current date and time. Use this whenever the user references relative dates like 'today', 'tomorrow', 'next week', or asks what time/date it is.",
+        parameters: { type: "object", properties: {}, required: [] }
     }
+    },
+    {
+    type: "function",
+    function: {
+        name: "deleteNote",
+        description: "Delete a previously saved note by its id number. Use this when the user asks to forget, remove, or delete something specific they had saved. If you don't know the id, call listNotes or searchNotes first to find it.",
+        parameters: {
+        type: "object",
+        properties: { id: { type: "number", description: "The id of the note to delete" } },
+        required: ["id"]
+        }
+    }
+}
 ];
 
 const requiredArgs: Record<string, string[]> = {
     saveNote: ["text"],
     listNotes: [],
-    searchNotes: ["query"]
+    searchNotes: ["query"],
+    getCurrentDateTime: [],
+    deleteNote: ["id"]
 };
 
 function validateArgs(name: string, args: any): string | null {
     const required = requiredArgs[name];
     if (required === undefined) return `Unknown tool: ${name}`;
 
-    for (const field of required) { //here field may be =>"text", "query"
-        if (!(field in args) || typeof args[field] !== "string" || args[field].trim() === "") {
-        return `Missing or invalid required field "${field}" for tool "${name}"`;
+    for (const field of required) {
+        if (!(field in args)) {
+        return `Missing required field "${field}" for tool "${name}"`;
+        }
+        const value = args[field];
+        const isEmptyString = typeof value === "string" && value.trim() === "";
+        const isInvalidNumber = typeof value === "number" && isNaN(value);
+        if (isEmptyString || isInvalidNumber) {
+        return `Invalid value for field "${field}" in tool "${name}"`;
         }
     }
     return null;
+}
+
+function getCurrentDateTime(): string {
+    return new Date().toLocaleString("en-US", {
+        weekday: "long", year: "numeric", month: "long", day: "numeric",
+        hour: "2-digit", minute: "2-digit"
+    });
 }
 
 
@@ -82,7 +117,11 @@ export async function executeTool(name: string, rawArgs: string): Promise<string
         case "listNotes":
         return listNotes();
         case "searchNotes":
-        return await searchNotes(args.text);
+        return await searchNotes(args.query);
+        case "getCurrentDateTime":
+        return getCurrentDateTime();
+        case "deleteNote":
+        return deleteNote(Number(args.id));
         default:
         return `Unknown tool: ${name}`;
     }

@@ -72,7 +72,8 @@ async function callGroqWithRetry(msgs: Message[], maxRetries = 2): Promise<Assis
 
         if (attempt < maxRetries) {
             const waitMs = isRateLimit ? 8000 : 1000 * Math.pow(2, attempt); // rate limits need longer waits
-            console.log(`⚠️  Attempt ${attempt + 1} failed (${isRateLimit ? "rate limit" : "error"}) — retrying in ${waitMs / 1000}s...`);
+            //console.log(`⚠️  Attempt ${attempt + 1} failed (${isRateLimit ? "rate limit" : "error"}) — retrying in ${waitMs / 1000}s...`);
+            console.log(`⚠️  Attempt ${attempt + 1} failed: ${lastError.message} — retrying in ${waitMs / 1000}s...`);
             await new Promise(resolve => setTimeout(resolve, waitMs));
         }
         }

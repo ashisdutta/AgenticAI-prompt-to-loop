@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import {embedText} from "./embed.js"
+import { cosineSimilarity } from "./math.js";
 
 type Note = { id: number; text: string; vector:number[]; createdAt: string };
 
@@ -44,15 +45,6 @@ export function listNotes(): string {
     return notes.map(n => `#${n.id}: ${n.text} (saved ${n.createdAt})`).join("\n");
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-    let dot = 0, normA = 0, normB = 0;
-    for (let i = 0; i < a.length; i++) {
-        dot += a[i]! * b[i]!;
-        normA += a[i]! * a[i]!;
-        normB += b[i]! * b[i]!;
-    }
-    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 export async function searchNotes(query: string, topK = 3): Promise<string> {
     const notes = loadNotes();
@@ -66,4 +58,18 @@ export async function searchNotes(query: string, topK = 3): Promise<string> {
     if (top.length === 0) return "No relevant notes found.";
 
     return top.map(s => `#${s.note.id}: ${s.note.text} (score: ${s.score.toFixed(2)})`).join("\n");
+}
+
+
+export function deleteNote(id: number): string {
+    const notes = loadNotes();
+    const noteExists = notes.some(n => n.id === id);
+
+    if (!noteExists) {
+        return `No note found with id #${id}.`;
+    }
+
+    const updatedNotes = notes.filter(n => n.id !== id);
+    persistNotes(updatedNotes);
+    return `Deleted note #${id}.`;
 }
