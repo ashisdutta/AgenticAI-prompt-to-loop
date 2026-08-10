@@ -3,13 +3,12 @@ import "dotenv/config";
 import * as readline from "node:readline";
 import { encode } from "gpt-tokenizer";
 import { extractText, chunkText, type Chunk } from "./ingest-chunk.js";
-import { embedText, embedChunks, search, type EmbeddedChunk } from "./embed.js";
+import { embedText, embedChunks, search,getCachedChunks, saveChunks, type EmbeddedChunk } from "./embed.js";
 import { toolDefinitions, executeTool } from "./tools.js";
 
 const {GROQ_API_KEY, GROQ_URL, MODEL } = process.env;
 const MAX_TOKENS = 4096;
 const PDF_PATH = "./notes/ashis_dutta_resume.pdf";
-const CACHE_PATH = "./cache/embedded.json";
 const SIMILARITY_THRESHOLD = 0.25; 
 
 type Message = {
@@ -178,10 +177,11 @@ function ask(embeddedChunks: EmbeddedChunk[]) {
 async function main() {
     let embedded: EmbeddedChunk[];
 
-    if (fs.existsSync(CACHE_PATH)) {
-    console.log("Found cached embeddings —- loading from disk...");
-    const raw = fs.readFileSync(CACHE_PATH, "utf-8");
-    embedded = JSON.parse(raw);
+    const cached = getCachedChunks(PDF_PATH);
+
+    if (cached.length > 0) {
+        console.log("Found cached embeddings in database...");
+        embedded = cached;
     } else {
         console.log("No cache found —- extracting and embedding PDF...");
         const text = await extractText(PDF_PATH);
@@ -190,10 +190,8 @@ async function main() {
         embedded = await embedChunks(chunks);
         console.log(`Ready -> ${embedded.length} chunks indexed and embedded.\n`);
 
-        // Save it for next time
-        fs.mkdirSync("./cache", { recursive: true }); // creates the folder if it doesn't exist
-        fs.writeFileSync(CACHE_PATH, JSON.stringify(embedded));
-        console.log("Saved embeddings to cache.");
+        saveChunks(embedded);
+        console.log("Saved embeddings to database.");
     }
 
     console.log("Second Brain (RAG-enabled) — type 'exit' to quit.\n");

@@ -10,6 +10,7 @@ b) How "similarity" between two pieces of text becomes a math operation (cosine 
 import { pipeline } from "@huggingface/transformers";
 import type { Chunk } from "./ingest-chunk.js";
 import { cosineSimilarity } from "./math.js";
+import db from "./db.js";
 
 let embedder: any = null;
 
@@ -47,4 +48,18 @@ export function search(embeddedChunks: EmbeddedChunk[], queryVector: number[], t
     }));
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, topK);
+}
+
+
+
+export function getCachedChunks(source: string): EmbeddedChunk[] {
+    const rows = db.prepare("SELECT * FROM chunks WHERE source = ? ORDER BY id").all(source) as any[];
+    return rows.map(r => ({ id: r.id, source: r.source, text: r.text, vector: JSON.parse(r.vector) }));
+}
+
+export function saveChunks(chunks: EmbeddedChunk[]) {
+    const insert = db.prepare("INSERT INTO chunks (source, text, vector) VALUES (?, ?, ?)");
+    for (const chunk of chunks) {
+        insert.run(chunk.source, chunk.text, JSON.stringify(chunk.vector));
+    }
 }

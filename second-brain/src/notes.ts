@@ -1,75 +1,61 @@
-import * as fs from "fs";
-import {embedText} from "./embed.js"
+import db from "./db.js";
+import { embedText } from "./embed.js";
 import { cosineSimilarity } from "./math.js";
 
-type Note = { id: number; text: string; vector:number[]; createdAt: string };
+type Note = { id: number; text: string; vector: number[]; created_at: string };
+type NoteRow = { id: number; text: string; vector: string; created_at: string };
 
-const NOTES_PATH = "./cache/notes.json";
-
-function loadNotes(): Note[] {
-    if (!fs.existsSync(NOTES_PATH)) return [];
-    return JSON.parse(fs.readFileSync(NOTES_PATH, "utf-8"));
-}
-
-function persistNotes(notes: Note[]) {
-    fs.mkdirSync("./cache", { recursive: true });
-    fs.writeFileSync(NOTES_PATH, JSON.stringify(notes, null, 2));
+function rowToNote(row: NoteRow): Note {
+    return { ...row, vector: JSON.parse(row.vector) };
 }
 
 export async function saveNote(text: string): Promise<string> {
-    const notes = loadNotes();
+    const existing = db
+        .prepare("SELECT id FROM notes WHERE LOWER(TRIM(text)) = LOWER(TRIM(?))")
+        .get(text);
 
-    const isDuplicate = notes.some(
-        n => n.text.trim().toLowerCase() === text.trim().toLowerCase()
-    );
-    if (isDuplicate) {
+    if (existing) {
         return `Already saved: "${text}" — not adding a duplicate.`;
     }
 
     const vector = await embedText(text);
+    const createdAt = new Date().toISOString();
 
-    const newNote: Note = {
-        id: notes.length > 0 ? Math.max(...notes.map(n => n.id)) + 1 : 1,
-        text,
-        vector,
-        createdAt: new Date().toISOString()
-    };
-    notes.push(newNote);
-    persistNotes(notes);
-    return `Saved note #${newNote.id}: "${text}"`;
+    const result = db
+        .prepare("INSERT INTO notes (text, vector, created_at) VALUES (?, ?, ?)")
+        .run(text, JSON.stringify(vector), createdAt);
+
+    return `Saved note #${result.lastInsertRowid}: "${text}"`;
 }
 
 export function listNotes(): string {
-    const notes = loadNotes();
-    if (notes.length === 0) return "No notes saved yet.";
-    return notes.map(n => `#${n.id}: ${n.text} (saved ${n.createdAt})`).join("\n");
+    const rows = db.prepare("SELECT * FROM notes ORDER BY id").all() as NoteRow[];
+    if (rows.length === 0) return "No notes saved yet.";
+
+    return rows.map(r => `#${r.id}: ${r.text} (saved ${r.created_at})`).join("\n");
 }
 
-
 export async function searchNotes(query: string, topK = 3): Promise<string> {
-    const notes = loadNotes();
-    if (notes.length === 0) return "No notes saved yet.";
+    const rows = db.prepare("SELECT * FROM notes").all() as NoteRow[];
+    if (rows.length === 0) return "No notes saved yet.";
 
+    const notes = rows.map(rowToNote);
     const queryVector = await embedText(query);
+
     const scored = notes.map(n => ({ note: n, score: cosineSimilarity(queryVector, n.vector) }));
     scored.sort((a, b) => b.score - a.score);
 
-    const top = scored.slice(0, topK).filter(s => s.score >= 0.3); // reuse the same relevance-gate idea
+    const top = scored.slice(0, topK).filter(s => s.score >= 0.3);
     if (top.length === 0) return "No relevant notes found.";
 
     return top.map(s => `#${s.note.id}: ${s.note.text} (score: ${s.score.toFixed(2)})`).join("\n");
 }
 
-
 export function deleteNote(id: number): string {
-    const notes = loadNotes();
-    const noteExists = notes.some(n => n.id === id);
+    const result = db.prepare("DELETE FROM notes WHERE id = ?").run(id);
 
-    if (!noteExists) {
+    if (result.changes === 0) {
         return `No note found with id #${id}.`;
     }
-
-    const updatedNotes = notes.filter(n => n.id !== id);
-    persistNotes(updatedNotes);
     return `Deleted note #${id}.`;
 }
