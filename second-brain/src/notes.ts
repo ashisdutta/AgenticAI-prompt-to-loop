@@ -59,3 +59,8 @@ export function deleteNote(id: number): string {
     }
     return `Deleted note #${id}.`;
 }
+
+export function countNotes(): number {
+    const row = db.prepare("SELECT COUNT(*) as count FROM notes").get() as { count: number };
+    return row.count;
+}

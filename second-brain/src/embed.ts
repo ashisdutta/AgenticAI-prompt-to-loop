@@ -23,7 +23,6 @@ async function getEmbedder() {
 }
 
 export async function embedText(text: string): Promise<number[]> {
-    console.log(`[embedText called with: ${JSON.stringify(text)}]`);
     const extractor = await getEmbedder();
     const output = await extractor(text, { pooling: "mean", normalize: true });
     return Array.from(output.data as Float32Array);
@@ -62,4 +61,9 @@ export function saveChunks(chunks: EmbeddedChunk[]) {
     for (const chunk of chunks) {
         insert.run(chunk.source, chunk.text, JSON.stringify(chunk.vector));
     }
+}
+
+export function deleteChunks(source: string): number {
+    const result = db.prepare("DELETE FROM chunks WHERE source = ?").run(source);
+    return result.changes as number;
 }
