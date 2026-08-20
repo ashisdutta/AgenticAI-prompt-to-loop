@@ -29,6 +29,8 @@ Most AI app tutorials wrap everything in a framework — you get a working demo,
 - **Polished CLI** — colored output, a live spinner during tool calls, a boxed input prompt, and a small pixel-art banner on startup.
 
 ## Architecture
+<img width="818" height="726" alt="Screenshot 2026-08-20 at 1 25 12 PM" src="https://github.com/user-attachments/assets/983e26c3-2fde-4173-960b-b84b689f026a" />
+<img width="964" height="494" alt="Screenshot 2026-08-20 at 1 24 47 PM" src="https://github.com/user-attachments/assets/7ec72ce3-533b-41c9-8aeb-f6e9fae8ad5f" />
 
 ```
 Documents (PDF/txt/md)
