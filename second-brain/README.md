@@ -29,38 +29,9 @@ Most AI app tutorials wrap everything in a framework — you get a working demo,
 - **Polished CLI** — colored output, a live spinner during tool calls, a boxed input prompt, and a small pixel-art banner on startup.
 
 ## Architecture
-<img width="818" height="726" alt="Screenshot 2026-08-20 at 1 25 12 PM" src="https://github.com/user-attachments/assets/983e26c3-2fde-4173-960b-b84b689f026a" />
 <img width="964" height="494" alt="Screenshot 2026-08-20 at 1 24 47 PM" src="https://github.com/user-attachments/assets/7ec72ce3-533b-41c9-8aeb-f6e9fae8ad5f" />
+<img width="818" height="726" alt="Screenshot 2026-08-20 at 1 25 12 PM" src="https://github.com/user-attachments/assets/983e26c3-2fde-4173-960b-b84b689f026a" />
 
-```
-Documents (PDF/txt/md)
-   │
-   ▼
-extractTextFromFile → chunkText → embedText (local model)
-   │
-   ▼
-SQLite: chunks table  ──┐
-                         │
-User message ────────────┼──► buildSearchQuery → cosine similarity search
-                         │         │
-                         │         ▼
-                         │   relevance threshold gate
-                         │         │
-                         ▼         ▼
-                  apiMessages (system + history + retrieved context)
-                         │
-                         ▼
-                     Groq API (openai/gpt-oss-120b)
-                         │
-                         ▼
-              tool_calls? ──yes──► executeTool (validate → run → feed back) ──┐
-                    │no                                                       │
-                    ▼                                                         │
-                 final reply ◄─────────────────────────────────────────────────┘
-                    │
-                    ▼
-        SQLite: notes table (long-term memory)
-```
 
 No external vector database, no managed embeddings API, no agent framework — the embedding model runs locally, similarity search is a hand-written cosine similarity function, and the agent loop is a plain `while` loop around the Groq API.
 
